@@ -19,13 +19,13 @@ def get_font(size=25):
     except:
         return ImageFont.load_default()
 
-# 오른쪽 정렬 함수
+# 우측 정렬 함수 (금액용)
 def draw_right(draw, x_end, y, text, font, fill="black"):
     bbox = font.getbbox(str(text))
     w = bbox[2] - bbox[0]
     draw.text((x_end - w, y), str(text), font=font, fill=fill)
 
-# 중앙 정렬 함수
+# 중앙 정렬 함수 (월일, 규격, 수량용)
 def draw_center(draw, x_start, x_end, y, text, font, fill="black"):
     bbox = font.getbbox(str(text))
     w = bbox[2] - bbox[0]
@@ -33,8 +33,8 @@ def draw_center(draw, x_start, x_end, y, text, font, fill="black"):
     draw.text((center - w / 2, y), str(text), font=font, fill=fill)
 
 # --- [1. 정보 입력] ---
-st.header("1. 명세서 작성 (v2.5)")
-client = st.text_input("🏢 거래처명", key="client_v25")
+st.header("1. 명세서 작성 (v2.6)")
+client = st.text_input("🏢 거래처명", key="client_v26")
 
 with st.container():
     c1, c2 = st.columns(2)
@@ -71,65 +71,64 @@ if st.button("🚀 명세서 이미지 만들기", type="primary", use_container
             orig = Image.open("template.png").convert("RGB")
             W, H = orig.size
 
-            # [수정 3] 줄 자를 때 픽셀 2개씩 줄여서 겹침 방지 (62->60, 60->58)
+            # [수정] 줄 자르기 정밀화: 선을 건드리지 않게 상하 2픽셀씩 더 안쪽을 깎음
             H_TOP = 345        
-            H_ROW1 = 60        # 회색 줄 (345~405)
-            H_ROW2 = 58        # 흰색 줄 (405~463)
-            
-            # 1. 조각 추출
-            header = orig.crop((0, 0, W, H_TOP))
-            row_gray = orig.crop((0, 345, W, 405))
-            row_white = orig.crop((0, 405, W, 463))
+            # 회색줄/흰색줄 높이를 58로 줄여서 테두리 침범 방지
+            row_gray = orig.crop((0, 347, W, 405)) 
+            row_white = orig.crop((0, 407, W, 465))
             footer = orig.crop((0, H - 72, W, H)) 
 
-            # 2. 이미지 조립
+            # 이미지 조립
             count = len(st.session_state.my_items)
-            row_heights = [H_ROW1 if i % 2 == 0 else H_ROW2 for i in range(count)]
-            new_h = H_TOP + sum(row_heights) + footer.height
+            H_ROW = 58
+            new_h = H_TOP + (H_ROW * count) + footer.height
             res = Image.new("RGB", (W, new_h), (255, 255, 255))
 
-            res.paste(header, (0, 0))
-            curr_y = H_TOP
+            res.paste(orig.crop((0, 0, W, H_TOP)), (0, 0))
             for i in range(count):
                 row_img = row_gray if i % 2 == 0 else row_white
-                res.paste(row_img, (0, curr_y))
-                curr_y += row_heights[i]
-            res.paste(footer, (0, curr_y))
+                res.paste(row_img, (0, H_TOP + (i * H_ROW)))
+            res.paste(footer, (0, H_TOP + (count * H_ROW)))
 
-            # 3. 글자 채우기 (요청하신 좌표 대이동 적용)
+            # 3. 글자 채우기 (이미지 분석 기반 스마트 좌표)
             draw = ImageDraw.Draw(res)
             f_mid = get_font(28)
-            f_large = get_font(42) # [수정 2] 합계금액 폰트 키움
+            f_total_box = get_font(50) # 합계금액 폰트 크게
 
-            # [수정 1] 발행일자/거래처명 (10px 아래로, 500px 오른쪽으로, '귀하' 삭제)
-            draw.text((150 + 500, 42 + 10), datetime.now().strftime("%Y-%m-%d"), font=f_mid, fill="black")
-            draw.text((150 + 500, 98 + 10), f"{client}", font=f_mid, fill="black")
+            # 상단 정보 (발행일자, 거래처명 박스 중앙)
+            draw.text((150, 52), datetime.now().strftime("%Y-%m-%d"), font=f_mid, fill="black")
+            draw.text((150, 108), f"{client}", font=f_mid, fill="black")
 
-            # [수정 2] 상단 합계금액 (500px 오른쪽으로)
+            # 합계금액 (회색 큰 박스 우측 정렬)
             total_sum = sum(item['price'] for item in st.session_state.my_items)
-            draw_right(draw, 630 + 500, 195, f"{total_sum:,}", f_large)
+            draw_right(draw, 630, 205, f"{total_sum:,}", f_total_box)
 
-            # [수정 4~7] 내역 글씨 위치 조정
-            curr_y = H_TOP
+            # 내역 정밀 정렬
             for i, item in enumerate(st.session_state.my_items):
-                ty = curr_y + (row_heights[i] // 2) - 15
-                draw_center(draw, 0, 90, ty, f"{item['m']}/{item['d']}", f_mid) # 월일
-                draw.text((110 + 300, ty), item['name'], font=f_mid, fill="black") # [수정 4] 품목 +300
-                draw_center(draw, 420 + 500, 520 + 500, ty, item['spec'], f_mid)  # [수정 5] 규격 +500
-                draw_center(draw, 520 + 500, 620 + 500, ty, str(item['qty']), f_mid) # [수정 6] 수량 +500
-                draw_right(draw, 870 + 260, ty, f"{item['price']:,}", f_mid) # [수정 7] 공급가액 (W=1150에 맞춤)
-                draw_right(draw, 1050 + 80, ty, "0", f_mid) # 세액
-                curr_y += row_heights[i]
+                ty = H_TOP + (i * H_ROW) + 15
+                
+                # 월일: 첫번째 칸 중앙
+                draw_center(draw, 0, 90, ty, f"{item['m']}/{item['d']}", f_mid)
+                # 품목: 두번째 칸 왼쪽 (약간 띄움)
+                draw.text((105, ty), item['name'], font=f_mid, fill="black")
+                # 규격: 세번째 칸 중앙
+                draw_center(draw, 420, 520, ty, item['spec'], f_mid)
+                # 수량: 네번째 칸 중앙
+                draw_center(draw, 520, 620, ty, str(item['qty']), f_mid)
+                # 공급가액: 다섯번째 칸 우측
+                draw_right(draw, 940, ty, f"{item['price']:,}", f_mid)
+                # 세액: 여섯번째 칸 우측
+                draw_right(draw, 1140, ty, "0", f_mid)
 
-            # [수정 8] 제일 아래줄 합계 (800px 이동 효과 적용)
-            foot_ty = curr_y + (footer.height // 2) - 15
-            draw_right(draw, 870 + 260, foot_ty, f"{total_sum:,}", f_mid) 
-            draw_right(draw, 1050 + 80, foot_ty, "0", f_mid)
+            # 최하단 합계 줄
+            foot_ty = H_TOP + (count * H_ROW) + 20
+            draw_right(draw, 940, foot_ty, f"{total_sum:,}", f_mid)
+            draw_right(draw, 1140, foot_ty, "0", f_mid)
 
             st.image(res)
             buf = io.BytesIO()
             res.save(buf, format="PNG")
-            st.download_button("📥 최종 수정본 저장", buf.getvalue(), f"명세서_{client}.png")
+            st.download_button("📥 최종 교정본 저장", buf.getvalue(), f"명세서_{client}.png")
 
         except Exception as e:
             st.error(f"오류: {e}")
