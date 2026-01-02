@@ -10,7 +10,7 @@ if 'my_items' not in st.session_state:
 if 'edit_index' not in st.session_state:
     st.session_state.edit_index = None
 
-st.set_page_config(page_title="간편 명세서 (깔끔 리스트형)", layout="centered")
+st.set_page_config(page_title="간편 명세서 (버튼 우측형)", layout="centered")
 
 @st.cache_resource
 def get_font(size=25):
@@ -55,7 +55,7 @@ if st.session_state.edit_index is None:
 
 st.divider()
 
-# --- [3. 내역 확인 (줄 구분 및 줄바꿈 적용)] ---
+# --- [3. 내역 확인 (날짜/내역은 왼쪽, 버튼은 오른쪽)] ---
 if st.session_state.my_items:
     st.subheader("📝 내역 확인 및 수정")
     for i, item in enumerate(st.session_state.my_items):
@@ -63,13 +63,12 @@ if st.session_state.my_items:
         # --- 수정 모드 ---
         if st.session_state.edit_index == i:
             with st.container(border=True):
-                st.info(f"📍 {i+1}번 품목 수정 중")
+                st.info(f"📍 {i+1}번 항목 수정")
+                ed_c1, ed_c2 = st.columns(2)
                 m_list = [f"{j:02d}" for j in range(1, 13)]
                 d_list = [f"{j:02d}" for j in range(1, 32)]
-                
-                ed_c1, ed_c2 = st.columns(2)
                 new_m = ed_c1.selectbox("월", m_list, index=m_list.index(item['m']), key=f"ed_m_{i}")
-                new_d = ed_c2.selectbox("일", d_list, index=d_list.index(item['d']), key=f"ed_d_{i}")
+                new_d = ed_col2 = ed_c2.selectbox("일", d_list, index=d_list.index(item['d']), key=f"ed_d_{i}")
                 
                 new_name = st.text_input("품목명", value=item['name'], key=f"ed_na_{i}")
                 new_spec = st.text_input("규격", value=item['spec'].replace("(t)", ""), key=f"ed_sp_{i}")
@@ -89,25 +88,25 @@ if st.session_state.my_items:
                     st.session_state.edit_index = None
                     st.rerun()
         
-        # --- 일반 표시 모드 ---
+        # --- 일반 표시 모드 (버튼 우측 배치) ---
         else:
-            with st.container():
-                # 1층: 날짜 (크게)
-                st.markdown(f"### 📅 {item['m']}월 {item['d']}일")
-                
-                # 2층: 상세 정보 (한 줄에 모음)
-                st.write(f"**품목:** {item['name']} | **규격:** {item['spec']} | **수량:** {item['qty']} | **금액:** {item['price']:,}원")
-                
-                # 3층: 버튼
-                b_col1, b_col2 = st.columns(2)
-                if b_col1.button("✏️ 수정", key=f"ed_btn_{i}", use_container_width=True):
+            # 큰 칸을 나눠서 왼쪽엔 글씨, 오른쪽엔 버튼
+            main_col, btn_col = st.columns([3, 1.2]) 
+            
+            with main_col:
+                st.markdown(f"**📅 {item['m']}/{item['d']}** | {item['name']}")
+                st.caption(f"{item['spec']} | {item['qty']}t | {item['price']:,}원")
+            
+            with btn_col:
+                # 버튼을 위아래가 아닌 양옆으로 작게 배치
+                b1, b2 = st.columns(2)
+                if b1.button("✏️", key=f"ed_btn_{i}", help="수정"):
                     st.session_state.edit_index = i
                     st.rerun()
-                if b_col2.button("🗑️ 삭제", key=f"del_btn_{i}", use_container_width=True):
+                if b2.button("🗑️", key=f"del_btn_{i}", help="삭제"):
                     st.session_state.my_items.pop(i)
                     st.rerun()
-                
-                st.divider() # 항목 간 확실한 구분선
+            st.divider()
 
 # --- [4. 명세서 이미지 생성] ---
 if st.button("🚀 명세서 이미지 만들기", use_container_width=True, type="primary"):
@@ -135,11 +134,8 @@ if st.button("🚀 명세서 이미지 만들기", use_container_width=True, typ
             f_mid = get_font(28)
             f_big = get_font(48)
 
-            # 발행일자, 거래처명 (620px)
             draw_right(draw, 620, 67, datetime.now().strftime("%Y-%m-%d"), f_mid)
             draw_right(draw, 620, 122, f"{client}", f_mid)
-
-            # 상단 합계 (1070px)
             total_sum = sum(item['price'] for item in st.session_state.my_items)
             draw_right(draw, 1070, 201, f"{total_sum:,}", f_big)
 
@@ -147,14 +143,11 @@ if st.button("🚀 명세서 이미지 만들기", use_container_width=True, typ
                 ty = H_TOP + (i * H_ROW) + 12
                 draw.text((20, ty), f"{item['m']}/{item['d']}", font=f_mid, fill="black")
                 draw.text((348, ty), item['name'], font=f_mid, fill="black")
-                
-                # 규격 위치: 850 (부모님 요청 반영)
                 draw_right(draw, 850, ty, item['spec'], f_mid)          
                 draw_right(draw, 1060, ty, f"{item['qty']}", f_mid)     
                 draw_right(draw, 1510, ty, f"{item['price']:,}", f_mid) 
                 draw_right(draw, 1700, ty, "0", f_mid)                  
 
-            # 하단 합계
             foot_ty = H_TOP + (count * H_ROW) + 18
             draw_right(draw, 1510, foot_ty, f"{total_sum:,}", f_mid)
             draw_right(draw, 1700, foot_ty, "0", f_mid)
