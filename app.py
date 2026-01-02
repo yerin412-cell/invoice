@@ -4,114 +4,112 @@ from datetime import datetime
 import io
 import urllib.request
 
-# --- [0. 저장소 초기화 - v1.0] ---
-if 'items_v10' not in st.session_state:
-    st.session_state.items_v10 = []
+# --- [0. 저장소 초기화 - v1.1] ---
+if 'items_v11' not in st.session_state:
+    st.session_state.items_v11 = []
 
 st.set_page_config(page_title="간편 거래명세서", layout="centered")
 
 @st.cache_resource
 def get_font():
-    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Bold.ttf"
     try:
         font_data = urllib.request.urlopen(font_url).read()
         return io.BytesIO(font_data)
     except: return None
 
-# --- [1. 정보 입력 (v1.0)] ---
-st.header("1. 정보 입력 (v1.0)")
-client = st.text_input("🏢 거래처명", key="c_v10")
+# --- [1. 정보 입력 (v1.1)] ---
+st.header("1. 정보 입력 (v1.1)")
+client = st.text_input("🏢 거래처명", key="c_v11")
 
 with st.container():
     col1, col2 = st.columns(2)
-    with col1: m = st.text_input("월", value=datetime.now().strftime("%m"), key="m_v10")
-    with col2: d = st.text_input("일", value=datetime.now().strftime("%d"), key="d_v10")
-    
-    name = st.text_input("품목명", key="n_v10")
-    spec = st.text_input("규격", key="s_v10")
-    
+    with col1: m = st.text_input("월", value=datetime.now().strftime("%m"), key="m_v11")
+    with col2: d = st.text_input("일", value=datetime.now().strftime("%d"), key="d_v11")
+    name = st.text_input("품목명", key="n_v11")
+    spec = st.text_input("규격", key="s_v11")
     c3, c4 = st.columns(2)
-    with c3: qty = st.number_input("수량", value=1.0, step=0.5, key="q_v10")
-    with c4: price = st.number_input("공급가액", value=0, step=1000, key="p_v10")
+    with c3: qty = st.number_input("수량", value=1.0, step=0.5, key="q_v11")
+    with c4: price = st.number_input("공급가액", value=0, step=1000, key="p_v11")
 
 if st.button("➕ 추가하기", use_container_width=True):
     if name:
-        st.session_state.items_v10.append({
-            "m": m, "d": d, "name": name, "spec": spec, "qty": qty, "price": price
-        })
+        st.session_state.items_v11.append({"m":m, "d":d, "name":name, "spec":spec, "qty":qty, "price":price})
         st.rerun()
 
 st.divider()
 
 # --- [2. 거래 내역 리스트] ---
 st.header("2. 현재 입력된 내역")
-if st.session_state.items_v10:
-    for i, item in enumerate(st.session_state.items_v10):
+if st.session_state.items_v11:
+    for i, item in enumerate(st.session_state.items_v11):
         st.write(f"✅ {i+1}. {item['name']} - {item['price']:,}원")
     if st.button("🗑️ 전체 삭제"):
-        st.session_state.items_v10 = []
+        st.session_state.items_v11 = []
         st.rerun()
-else:
-    st.info("내역이 없습니다.")
 
 st.divider()
 
-# --- [3. 동적 조립 명세서 생성] ---
-if st.button("🚀 내역 수에 맞춰 이미지 생성", type="primary", use_container_width=True):
+# --- [3. 동적 명세서 이미지 생성] ---
+if st.button("🚀 내역 수에 딱 맞게 명세서 만들기", type="primary", use_container_width=True):
     if not client: st.warning("거래처명을 적어주세요!")
-    elif not st.session_state.items_v10: st.warning("내역을 추가해주세요!")
+    elif not st.session_state.items_v11: st.warning("내역을 추가해주세요!")
     else:
         try:
-            full_img = Image.open("template.png").convert("RGB")
-            w, h = full_img.size
-
-            # --- 정밀 좌표 조절 영역 ---
-            # 헤더: 0부터 390까지
-            header = full_img.crop((0, 0, w, 390))
-            # 줄 한 칸: 390부터 440까지 (높이 50)
-            row_unit = full_img.crop((0, 390, w, 440))
-            # 푸터: 합계 부분 (이미지 끝에서 100픽셀 정도 자름)
-            footer = full_img.crop((0, h-100, w, h))
-
-            # 새 이미지 높이 계산 및 생성
-            new_h = header.height + (row_unit.height * len(st.session_state.items_v10)) + footer.height
-            result_img = Image.new("RGB", (w, new_h), (255, 255, 255))
-
-            # 이미지 조각 붙이기
-            result_img.paste(header, (0, 0))
-            for i in range(len(st.session_state.items_v10)):
-                y_pos = header.height + (i * row_unit.height)
-                result_img.paste(row_unit, (0, y_pos))
-            result_img.paste(footer, (0, header.height + (len(st.session_state.items_v10) * row_unit.height)))
-
-            # 글자 쓰기 시작
-            draw = ImageDraw.Draw(result_img)
-            font_data = get_font()
-            font = ImageFont.truetype(font_data, 24) if font_data else ImageFont.load_default()
+            # 설정값
+            W, H_UNIT = 800, 45 # 가로폭, 줄 높이
+            items = st.session_state.items_v11
+            count = len(items)
             
-            # 1. 상단 정보
-            draw.text((250, 85), datetime.now().strftime("%Y  %m  %d"), font=font, fill="black")
-            draw.text((150, 155), f"{client} 귀하", font=font, fill="black")
+            # 전체 높이 계산 (헤더 4줄 + 내역 n줄 + 합계 1줄)
+            total_h = H_UNIT * (4 + count + 1)
+            img = Image.new("RGB", (W, total_h), (255, 255, 255))
+            draw = ImageDraw.Draw(img)
+            font_data = get_font()
+            font = ImageFont.truetype(font_data, 18) if font_data else ImageFont.load_default()
+            title_font = ImageFont.truetype(font_data, 30) if font_data else font
 
-            # 2. 동적 줄 내용
+            # 1. 헤더 그리기
+            draw.rectangle([0, 0, W, H_UNIT*2], outline="black", width=2)
+            draw.text((W//2-80, 20), "거 래 명 세 서", font=title_font, fill="black")
+            
+            # 2. 거래처 및 날짜 정보 줄
+            draw.rectangle([0, H_UNIT*2, W, H_UNIT*3], outline="black", width=2)
+            draw.text((20, H_UNIT*2+10), f"발행일자: {datetime.now().strftime('%Y-%m-%d')}", font=font, fill="black")
+            draw.text((400, H_UNIT*2+10), f"거래처명: {client} 귀하", font=font, fill="black")
+
+            # 3. 표 제목줄 (회색 배경)
+            draw.rectangle([0, H_UNIT*3, W, H_UNIT*4], fill=(220, 220, 220), outline="black")
+            headers = ["월/일", "품목", "규격", "수량", "금액"]
+            xs = [10, 100, 400, 550, 650]
+            for txt, x in zip(headers, xs):
+                draw.text((x, H_UNIT*3+10), txt, font=font, fill="black")
+
+            # 4. 내역 그리기 (내역 수만큼 반복)
             total_sum = 0
-            for i, item in enumerate(st.session_state.items_v10):
-                line_y = header.height + (i * row_unit.height) + 10
-                draw.text((35, line_y), item['m'], font=font, fill="black")
-                draw.text((80, line_y), item['d'], font=font, fill="black")
-                draw.text((160, line_y), item['name'], font=font, fill="black")
-                draw.text((650, line_y), f"{item['price']:,}", font=font, fill="black")
+            for i, item in enumerate(items):
+                curr_y = H_UNIT * (4 + i)
+                # 배경색 교차 (흰색/연회색)
+                bg_color = (255, 255, 255) if i % 2 == 0 else (240, 240, 240)
+                draw.rectangle([0, curr_y, W, curr_y + H_UNIT], fill=bg_color, outline="black")
+                
+                draw.text((10, curr_y+10), f"{item['m']}/{item['d']}", font=font, fill="black")
+                draw.text((100, curr_y+10), item['name'], font=font, fill="black")
+                draw.text((400, curr_y+10), item['spec'], font=font, fill="black")
+                draw.text((550, curr_y+10), str(item['qty']), font=font, fill="black")
+                draw.text((650, curr_y+10), f"{item['price']:,}", font=font, fill="black")
                 total_sum += item['price']
 
-            # 3. 하단 합계
-            footer_text_y = header.height + (len(st.session_state.items_v10) * row_unit.height) + 30
-            draw.text((650, footer_text_y), f"{total_sum:,}", font=font, fill="black")
+            # 5. 합계 줄 (마지막)
+            footer_y = H_UNIT * (4 + count)
+            draw.rectangle([0, footer_y, W, footer_y + H_UNIT], fill=(200, 200, 200), outline="black")
+            draw.text((400, footer_y+10), "합 계 금 액 (VAT 포함)", font=font, fill="black")
+            draw.text((650, footer_y+10), f"{total_sum:,}", font=font, fill="black")
 
-            st.image(result_img)
-            
+            st.image(img)
             buf = io.BytesIO()
-            result_img.save(buf, format="PNG")
-            st.download_button("📥 최종 명세서 저장", buf.getvalue(), f"명세서_{client}.png")
+            img.save(buf, format="PNG")
+            st.download_button("📥 이미지 저장하기", buf.getvalue(), "명세서_v1.1.png")
             
         except Exception as e:
-            st.error(f"이미지 생성 오류: {e}")
+            st.error(f"오류: {e}")
