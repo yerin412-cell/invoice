@@ -10,7 +10,7 @@ if 'my_items' not in st.session_state:
 if 'edit_index' not in st.session_state:
     st.session_state.edit_index = None
 
-st.set_page_config(page_title="간편 명세서 (최종 완성형)", layout="centered")
+st.set_page_config(page_title="간편 명세서 v3.9", layout="centered")
 
 @st.cache_resource
 def get_font(size=25):
@@ -35,9 +35,11 @@ if st.session_state.edit_index is None:
     with st.expander("➕ 새 품목 추가하기", expanded=True):
         d_col1, d_col2 = st.columns(2)
         with d_col1:
-            m_in = st.selectbox("월", [f"{i:02d}" for i in range(1, 13)], index=int(datetime.now().strftime("%m"))-1, key="new_m")
+            m_list = [f"{i:02d}" for i in range(1, 13)]
+            m_in = st.selectbox("월", m_list, index=int(datetime.now().strftime("%m"))-1, key="new_m")
         with d_col2:
-            d_in = st.selectbox("일", [f"{i:02d}" for i in range(1, 32)], index=int(datetime.now().strftime("%d"))-1, key="new_d")
+            d_list = [f"{i:02d}" for i in range(1, 32)]
+            d_in = st.selectbox("일", d_list, index=int(datetime.now().strftime("%d"))-1, key="new_d")
         
         name_in = st.text_input("📦 품목명", key="new_name")
         spec_in = st.text_input("📏 규격 (예: 25)", key="new_spec")
@@ -55,13 +57,12 @@ if st.session_state.edit_index is None:
 
 st.divider()
 
-# --- [3. 내역 확인 (v3.6 글씨 크기 + 버튼 우측 배치)] ---
+# --- [3. 내역 확인] ---
 if st.session_state.my_items:
     st.subheader("📝 내역 확인 및 수정")
     for i, item in enumerate(st.session_state.my_items):
         
         if st.session_state.edit_index == i:
-            # 수정 모드 (제자리에서 크게)
             with st.container(border=True):
                 st.info(f"📍 {i+1}번 품목 수정 중")
                 ed_c1, ed_c2 = st.columns(2)
@@ -87,15 +88,13 @@ if st.session_state.my_items:
                     st.session_state.edit_index = None
                     st.rerun()
         else:
-            # 일반 모드 (가독성 유지 + 버튼만 우측)
-            col_txt, col_btn = st.columns([4, 1]) # 왼쪽은 넓게, 오른쪽은 버튼용
-            
+            col_txt, col_btn = st.columns([4, 1.2]) 
             with col_txt:
                 st.markdown(f"### 📅 {item['m']}월 {item['d']}일")
-                st.write(f"**{item['name']}** ({item['spec']}) | {item['qty']}t | {item['price']:,}원")
+                # [수정] 수량 뒤에 't'를 완전히 제거했습니다.
+                st.write(f"**{item['name']}** ({item['spec']}) | {item['qty']} | {item['price']:,}원")
             
             with col_btn:
-                # 수정/삭제 버튼을 세로로 배치하거나 작게 나란히
                 if st.button("✏️ 수정", key=f"ed_btn_{i}", use_container_width=True):
                     st.session_state.edit_index = i
                     st.rerun()
@@ -138,6 +137,8 @@ if st.button("🚀 명세서 이미지 만들기", use_container_width=True, typ
                 ty = H_TOP + (i * H_ROW) + 12
                 draw.text((20, ty), f"{item['m']}/{item['d']}", font=f_mid, fill="black")
                 draw.text((348, ty), item['name'], font=f_mid, fill="black")
+                
+                # [확인] 명세서 이미지에도 수량(1060 위치)에 't'가 들어가지 않도록 설정됨
                 draw_right(draw, 850, ty, item['spec'], f_mid)          
                 draw_right(draw, 1060, ty, f"{item['qty']}", f_mid)     
                 draw_right(draw, 1510, ty, f"{item['price']:,}", f_mid) 
