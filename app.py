@@ -19,7 +19,7 @@ def get_font(size=25):
     except:
         return ImageFont.load_default()
 
-# 우측 정렬 함수 (금액용)
+# 우측 정렬 함수 (금액 및 우측 정렬용)
 def draw_right(draw, x_end, y, text, font, fill="black"):
     bbox = font.getbbox(str(text))
     w = bbox[2] - bbox[0]
@@ -33,8 +33,8 @@ def draw_center(draw, x_start, x_end, y, text, font, fill="black"):
     draw.text((center - w / 2, y), str(text), font=font, fill=fill)
 
 # --- [1. 정보 입력] ---
-st.header("1. 명세서 작성 (v2.6)")
-client = st.text_input("🏢 거래처명", key="client_v26")
+st.header("1. 명세서 작성 (v2.7)")
+client = st.text_input("🏢 거래처명")
 
 with st.container():
     c1, c2 = st.columns(2)
@@ -71,16 +71,16 @@ if st.button("🚀 명세서 이미지 만들기", type="primary", use_container
             orig = Image.open("template.png").convert("RGB")
             W, H = orig.size
 
-            # [수정] 줄 자르기 정밀화: 선을 건드리지 않게 상하 2픽셀씩 더 안쪽을 깎음
+            # [수정] 줄 자르기: 선(테두리)을 포함하지 않도록 안쪽 픽셀만 정밀하게 컷팅
             H_TOP = 345        
-            # 회색줄/흰색줄 높이를 58로 줄여서 테두리 침범 방지
-            row_gray = orig.crop((0, 347, W, 405)) 
-            row_white = orig.crop((0, 407, W, 465))
+            # 회색줄: 346~405 / 흰색줄: 408~467 (경계선 피하기)
+            row_gray = orig.crop((0, 346, W, 405)) 
+            row_white = orig.crop((0, 408, W, 467))
             footer = orig.crop((0, H - 72, W, H)) 
 
             # 이미지 조립
             count = len(st.session_state.my_items)
-            H_ROW = 58
+            H_ROW = 58 # 실제 출력될 높이
             new_h = H_TOP + (H_ROW * count) + footer.height
             res = Image.new("RGB", (W, new_h), (255, 255, 255))
 
@@ -90,45 +90,40 @@ if st.button("🚀 명세서 이미지 만들기", type="primary", use_container
                 res.paste(row_img, (0, H_TOP + (i * H_ROW)))
             res.paste(footer, (0, H_TOP + (count * H_ROW)))
 
-            # 3. 글자 채우기 (이미지 분석 기반 스마트 좌표)
+            # 3. 글자 채우기 (이미지 분석 기반 정밀 좌표)
             draw = ImageDraw.Draw(res)
             f_mid = get_font(28)
-            f_total_box = get_font(50) # 합계금액 폰트 크게
+            f_total_box = get_font(48)
 
-            # 상단 정보 (발행일자, 거래처명 박스 중앙)
-            draw.text((150, 52), datetime.now().strftime("%Y-%m-%d"), font=f_mid, fill="black")
-            draw.text((150, 108), f"{client}", font=f_mid, fill="black")
+            # [문제1 해결] 발행일자, 거래처명 우측 정렬 (박스 끝 385px)
+            draw_right(draw, 385, 52, datetime.now().strftime("%Y-%m-%d"), f_mid)
+            draw_right(draw, 385, 108, f"{client}", f_mid)
 
-            # 합계금액 (회색 큰 박스 우측 정렬)
+            # [문제2 해결] 상단 합계금액 우측 정렬 (박스 끝 635px)
             total_sum = sum(item['price'] for item in st.session_state.my_items)
-            draw_right(draw, 630, 205, f"{total_sum:,}", f_total_box)
+            draw_right(draw, 635, 202, f"{total_sum:,}", f_total_box)
 
-            # 내역 정밀 정렬
+            # [문제3 해결] 내역 그리드 정렬 (각 칸의 중앙 또는 우측 끝)
+            # 칸 구분: 월일(0-95), 품목(95-385), 규격(385-505), 수량(505-645), 공급가액(645-935), 세액(935-1150)
             for i, item in enumerate(st.session_state.my_items):
-                ty = H_TOP + (i * H_ROW) + 15
+                ty = H_TOP + (i * H_ROW) + 12
                 
-                # 월일: 첫번째 칸 중앙
-                draw_center(draw, 0, 90, ty, f"{item['m']}/{item['d']}", f_mid)
-                # 품목: 두번째 칸 왼쪽 (약간 띄움)
-                draw.text((105, ty), item['name'], font=f_mid, fill="black")
-                # 규격: 세번째 칸 중앙
-                draw_center(draw, 420, 520, ty, item['spec'], f_mid)
-                # 수량: 네번째 칸 중앙
-                draw_center(draw, 520, 620, ty, str(item['qty']), f_mid)
-                # 공급가액: 다섯번째 칸 우측
-                draw_right(draw, 940, ty, f"{item['price']:,}", f_mid)
-                # 세액: 여섯번째 칸 우측
-                draw_right(draw, 1140, ty, "0", f_mid)
+                draw_center(draw, 0, 95, ty, f"{item['m']}/{item['d']}", f_mid)   # 월일 (중앙)
+                draw.text((105, ty), item['name'], font=f_mid, fill="black")     # 품목 (왼쪽+여백)
+                draw_center(draw, 385, 505, ty, item['spec'], f_mid)            # 규격 (중앙)
+                draw_center(draw, 505, 645, ty, str(item['qty']), f_mid)         # 수량 (중앙)
+                draw_right(draw, 925, ty, f"{item['price']:,}", f_mid)          # 공급가액 (우측)
+                draw_right(draw, 1135, ty, "0", f_mid)                          # 세액 (우측)
 
-            # 최하단 합계 줄
-            foot_ty = H_TOP + (count * H_ROW) + 20
-            draw_right(draw, 940, foot_ty, f"{total_sum:,}", f_mid)
-            draw_right(draw, 1140, foot_ty, "0", f_mid)
+            # [문제4 해결] 하단 합계 정렬 (공급가액/세액 칸과 일치)
+            foot_ty = H_TOP + (count * H_ROW) + 18
+            draw_right(draw, 925, foot_ty, f"{total_sum:,}", f_mid)
+            draw_right(draw, 1135, foot_ty, "0", f_mid)
 
             st.image(res)
             buf = io.BytesIO()
             res.save(buf, format="PNG")
-            st.download_button("📥 최종 교정본 저장", buf.getvalue(), f"명세서_{client}.png")
+            st.download_button("📥 정밀 교정본 저장", buf.getvalue(), f"명세서_{client}.png")
 
         except Exception as e:
             st.error(f"오류: {e}")
