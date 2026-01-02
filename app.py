@@ -10,7 +10,7 @@ if 'my_items' not in st.session_state:
 if 'edit_index' not in st.session_state:
     st.session_state.edit_index = None
 
-st.set_page_config(page_title="간편 거래명세서 스마트형", layout="centered")
+st.set_page_config(page_title="간편 명세서 (모바일형)", layout="centered")
 
 @st.cache_resource
 def get_font(size=25):
@@ -26,48 +26,49 @@ def draw_right(draw, x_end, y, text, font, fill="black"):
     w = bbox[2] - bbox[0]
     draw.text((x_end - w, y), str(text), font=font, fill=fill)
 
-# --- [1. 정보 입력창] ---
+# --- [1. 정보 입력창 (모바일 세로 배치)] ---
 st.header("🧾 명세서 작성 및 수정")
 client = st.text_input("🏢 거래처명", key="client_name")
 
 with st.container():
-    c1, c2, c3 = st.columns([1, 1, 2])
-    # 월/일 입력 (자동 보정)
-    with c1: 
-        m_in = st.number_input("월", 1, 12, int(datetime.now().strftime("%m")))
-        m_str = f"{min(max(m_in, 1), 12):02d}"
-    with c2: 
-        d_in = st.number_input("일", 1, 31, int(datetime.now().strftime("%d")))
-        d_str = f"{min(max(d_in, 1), 31):02d}"
-    with c3: name = st.text_input("품목명")
+    # 월/일 같은 줄 배치
+    d_col1, d_col2 = st.columns(2)
+    with d_col1:
+        m_list = [f"{i:02d}" for i in range(1, 13)]
+        m_str = st.selectbox("월 선택", m_list, index=int(datetime.now().strftime("%m"))-1)
+    with d_col2:
+        d_list = [f"{i:02d}" for i in range(1, 32)]
+        d_str = st.selectbox("일 선택", d_list, index=int(datetime.now().strftime("%d"))-1)
+    
+    # 품목명/규격/수량/금액 세로 배치 (모바일 편의성)
+    name = st.text_input("📦 품목명")
+    spec = st.text_input("📏 규격 (예: 25)")
+    qty = st.selectbox("🔢 수량", [0.5, 1.0])
+    price_man = st.number_input("💰 금액 (단위: 만원 / 1=만원)", min_value=0, value=0, step=1)
 
-    c4, c5, c6 = st.columns([1, 1, 2])
-    with c4: spec = st.text_input("규격")
-    with c5: qty = st.selectbox("수량(t)", [0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
-    with c6: price_man = st.number_input("금액(단위: 만원)", 0, value=0)
-
-# 추가 및 수정 버튼
+# 추가 및 수정 버튼 로직
 if st.session_state.edit_index is None:
-    if st.button("➕ 내역 추가하기", use_container_width=True):
+    if st.button("➕ 이 내용으로 추가하기", use_container_width=True, type="primary"):
         if name:
             st.session_state.my_items.append({
                 "m": m_str, "d": d_str, "name": name, 
-                "spec": spec, "qty": qty, "price": price_man * 10000
+                "spec": f"{spec}(t)", "qty": qty, "price": price_man * 10000
             })
-            # 날짜순 정렬 (월, 일 순서)
             st.session_state.my_items.sort(key=lambda x: (x['m'], x['d']))
             st.rerun()
 else:
+    st.info("💡 현재 선택한 항목을 수정 중입니다.")
     col_edit1, col_edit2 = st.columns(2)
-    if col_edit1.button("✅ 수정 완료", variant="primary", use_container_width=True):
+    # variant="primary" 오류 해결을 위해 속성 제거
+    if col_edit1.button("✅ 수정 완료", use_container_width=True):
         st.session_state.my_items[st.session_state.edit_index] = {
             "m": m_str, "d": d_str, "name": name, 
-            "spec": spec, "qty": qty, "price": price_man * 10000
+            "spec": f"{spec}(t)", "qty": qty, "price": price_man * 10000
         }
         st.session_state.my_items.sort(key=lambda x: (x['m'], x['d']))
         st.session_state.edit_index = None
         st.rerun()
-    if col_edit2.button("❌ 취소", use_container_width=True):
+    if col_edit2.button("❌ 수정 취소", use_container_width=True):
         st.session_state.edit_index = None
         st.rerun()
 
@@ -75,19 +76,20 @@ else:
 if st.session_state.my_items:
     st.subheader("📝 내역 확인")
     for i, item in enumerate(st.session_state.my_items):
-        cols = st.columns([3, 1, 1])
-        cols[0].write(f"[{item['m']}/{item['d']}] {item['name']} ({item['spec']}) - {item['qty']}t / {item['price']:,}원")
-        if cols[1].button("수정", key=f"edit_btn_{i}"):
-            st.session_state.edit_index = i
-            st.rerun()
-        if cols[2].button("삭제", key=f"del_btn_{i}"):
-            st.session_state.my_items.pop(i)
-            st.rerun()
+        with st.expander(f"[{item['m']}/{item['d']}] {item['name']} - {item['price']:,}원", expanded=True):
+            st.write(f"규격: {item['spec']} / 수량: {item['qty']}")
+            ex_c1, ex_c2 = st.columns(2)
+            if ex_c1.button("✏️ 수정", key=f"edit_btn_{i}", use_container_width=True):
+                st.session_state.edit_index = i
+                st.rerun()
+            if ex_c2.button("🗑️ 삭제", key=f"del_btn_{i}", use_container_width=True):
+                st.session_state.my_items.pop(i)
+                st.rerun()
 
 st.divider()
 
 # --- [3. 명세서 생성] ---
-if st.button("🚀 명세서 이미지 만들기", type="primary", use_container_width=True):
+if st.button("🚀 명세서 이미지 만들기", use_container_width=True):
     if not st.session_state.my_items:
         st.warning("내역을 추가해주세요.")
     else:
@@ -112,37 +114,36 @@ if st.button("🚀 명세서 이미지 만들기", type="primary", use_container
             f_mid = get_font(28)
             f_big = get_font(48)
 
-            # 상단 정보 (더 오른쪽으로 조정)
-            draw_right(draw, 550, 67, datetime.now().strftime("%Y-%m-%d"), f_mid)
-            draw_right(draw, 550, 122, f"{client}", f_mid)
+            # [조정] 발행일자, 거래처명 (더 오른쪽으로: 600px)
+            draw_right(draw, 600, 67, datetime.now().strftime("%Y-%m-%d"), f_mid)
+            draw_right(draw, 600, 122, f"{client}", f_mid)
 
-            # 상단 합계
+            # [조정] 상단 합계 (1080px)
             total_sum = sum(item['price'] for item in st.session_state.my_items)
-            draw_right(draw, 1050, 201, f"{total_sum:,}", f_big)
+            draw_right(draw, 1080, 201, f"{total_sum:,}", f_big)
 
             # 내역 기록
             for i, item in enumerate(st.session_state.my_items):
                 ty = H_TOP + (i * H_ROW) + 12
-                # 월/일
+                # 월/일 (고정 위치)
                 draw.text((20, ty), f"{item['m']}/{item['d']}", font=f_mid, fill="black")
-                # 품목
+                # 품목 (고정 위치)
                 draw.text((348, ty), item['name'], font=f_mid, fill="black")
-                # 규격 (뒤에 (t) 추가)
-                draw.text((800, ty), f"{item['spec']}(t)", font=f_mid, fill="black")
-                # 수량 (살짝 왼쪽으로 이동 및 (t) 추가)
-                draw_right(draw, 1020, ty, f"{item['qty']}(t)", f_mid)
-                # 공급가액/세액 (더 오른쪽으로 이동)
-                draw_right(draw, 1450, ty, f"{item['price']:,}", f_mid)
-                draw_right(draw, 1650, ty, "0", f_mid)
+                
+                # [조정] 규격, 수량, 공급가액, 세액 모두 오른쪽 정렬
+                draw_right(draw, 880, ty, item['spec'], f_mid)          # 규격(t 포함됨)
+                draw_right(draw, 1080, ty, f"{item['qty']}", f_mid)     # 수량 (t 제외)
+                draw_right(draw, 1480, ty, f"{item['price']:,}", f_mid) # 공급가액 (더 우측)
+                draw_right(draw, 1680, ty, "0", f_mid)                  # 세액 (더 우측)
 
-            # 하단 합계
+            # [조정] 하단 합계 위치
             foot_ty = H_TOP + (count * H_ROW) + 18
-            draw_right(draw, 1450, foot_ty, f"{total_sum:,}", f_mid)
-            draw_right(draw, 1650, foot_ty, "0", f_mid)
+            draw_right(draw, 1480, foot_ty, f"{total_sum:,}", f_mid)
+            draw_right(draw, 1680, foot_ty, "0", f_mid)
 
             st.image(res)
             buf = io.BytesIO()
             res.save(buf, format="PNG")
-            st.download_button("📥 최종 명세서 저장", buf.getvalue(), f"명세서_{client}.png")
+            st.download_button("📥 최종 명세서 저장", buf.getvalue(), f"명세서_{client}.png", use_container_width=True)
         except Exception as e:
-            st.error(f"오류: {e}")
+            st.error(f"이미지 생성 중 오류가 발생했습니다: {e}")
