@@ -4,11 +4,11 @@ from datetime import datetime
 import io
 import urllib.request
 
-# --- [초기 설정] ---
+# --- [0. 저장소 초기화] ---
 if 'my_items' not in st.session_state:
     st.session_state.my_items = []
 
-st.set_page_config(page_title="명세서 위치 교정기", layout="wide")
+st.set_page_config(page_title="간편 거래명세서 최종본", layout="centered")
 
 @st.cache_resource
 def get_font(size=25):
@@ -19,102 +19,104 @@ def get_font(size=25):
     except:
         return ImageFont.load_default()
 
-# --- [사이드바: 미세 조정 제어판] ---
-st.sidebar.header("🎯 위치 미세 조정")
-st.sidebar.info("글자가 칸에 안 맞으면 아래 숫자를 조절하세요.")
+# 우측 정렬 함수 (부모님이 지정한 X좌표가 글자의 '끝' 지점이 되도록 설정)
+def draw_right(draw, x_end, y, text, font, fill="black"):
+    bbox = font.getbbox(str(text))
+    w = bbox[2] - bbox[0]
+    draw.text((x_end - w, y), str(text), font=font, fill=fill)
 
-# 1. 상단 정보 위치
-st.sidebar.subheader("📍 상단 (날짜/거래처)")
-off_top_x = st.sidebar.slider("가로 위치 (오른쪽으로)", 0, 1000, 600)
-off_top_y = st.sidebar.slider("세로 위치 (아래로)", 0, 200, 50)
+# --- [1. 정보 입력창] ---
+st.header("🧾 거래명세서 작성 (최종)")
+client = st.text_input("🏢 거래처명", key="client_final")
 
-# 2. 합계 금액 위치
-st.sidebar.subheader("💰 상단 합계 금액")
-off_total_x = st.sidebar.slider("합계 가로", 0, 1100, 1050)
-off_total_y = st.sidebar.slider("합계 세로", 0, 300, 210)
+with st.container():
+    col_date, col_item, col_spec, col_qty, col_price = st.columns([1, 2, 1, 1, 2])
+    with col_date: m = st.text_input("월", value=datetime.now().strftime("%m"))
+    with col_item: name = st.text_input("품목명")
+    with col_spec: spec = st.text_input("규격")
+    with col_qty: qty = st.number_input("수량", value=1.0, step=0.5)
+    with col_price: price = st.number_input("금액", value=0, step=1000)
 
-# 3. 내역 칸 가로 위치 (품목별)
-st.sidebar.subheader("📝 내역 칸별 가로 위치")
-col_name = st.sidebar.slider("품목 위치", 0, 1000, 400)
-col_spec = st.sidebar.slider("규격 위치", 0, 1000, 650)
-col_qty = st.sidebar.slider("수량 위치", 0, 1000, 750)
-col_price = st.sidebar.slider("공급가액 위치", 0, 1150, 1030)
-col_tax = st.sidebar.slider("세액 위치", 0, 1150, 1130)
+if st.button("➕ 품목 추가하기 (아래 리스트 확인)", use_container_width=True):
+    if name:
+        st.session_state.my_items.append({
+            "m": m, "d": datetime.now().strftime("%d"), 
+            "name": name, "spec": spec, "qty": qty, "price": price
+        })
+        st.rerun()
 
-# --- [메인 화면: 입력창] ---
-st.header("거래명세서 작성 v3.0")
-client = st.text_input("🏢 거래처명 (입력 후 Enter)")
-
-col1, col2, col3, col4, col5 = st.columns([1,2,1,1,2])
-with col1: m = st.text_input("월", "01")
-with col2: name = st.text_input("품목")
-with col3: spec = st.text_input("규격")
-with col4: qty = st.number_input("수량", 1.0)
-with col5: price = st.number_input("금액", 0)
-
-if st.button("➕ 추가"):
-    st.session_state.my_items.append({"m":m, "d":datetime.now().strftime("%d"), "name":name, "spec":spec, "qty":qty, "price":price})
-    st.rerun()
-
-# --- [이미지 생성 로직] ---
+# --- [2. 내역 리스트 및 수정(삭제) 기능] ---
 if st.session_state.my_items:
-    try:
-        orig = Image.open("template.png").convert("RGB")
-        W, H = orig.size
-        
-        # 줄 자르기 (정밀)
-        H_TOP = 345
-        row_gray = orig.crop((0, 346, W, 404))
-        row_white = orig.crop((0, 406, W, 464))
-        footer = orig.crop((0, H - 72, W, H))
-        
-        count = len(st.session_state.my_items)
-        H_ROW = 58
-        new_h = H_TOP + (H_ROW * count) + footer.height
-        res = Image.new("RGB", (W, new_h), (255, 255, 255))
-        
-        res.paste(orig.crop((0, 0, W, H_TOP)), (0, 0))
-        for i in range(count):
-            res.paste(row_gray if i % 2 == 0 else row_white, (0, H_TOP + (i * H_ROW)))
-        res.paste(footer, (0, H_TOP + (count * H_ROW)))
-        
-        draw = ImageDraw.Draw(res)
-        f_mid = get_font(28)
-        f_big = get_font(45)
+    st.subheader("📝 추가된 내역 (실수하면 삭제하세요)")
+    for i, item in enumerate(st.session_state.my_items):
+        cols = st.columns([4, 1])
+        cols[0].write(f"{i+1}. {item['name']} ({item['spec']}) - {item['price']:,}원")
+        if cols[1].button("삭제", key=f"del_{i}"):
+            st.session_state.my_items.pop(i)
+            st.rerun()
+    
+    if st.button("🗑️ 전체 삭제", type="secondary"):
+        st.session_state.my_items = []
+        st.rerun()
 
-        # [상단 정보] 슬라이더 값 적용
-        draw.text((off_top_x, off_top_y), datetime.now().strftime("%Y-%m-%d"), font=f_mid, fill="black")
-        draw.text((off_top_x, off_top_y + 55), client, font=f_mid, fill="black")
+st.divider()
 
-        # [상단 합계] 슬라이더 값 적용 (우측 정렬)
-        total_val = sum(item['price'] for item in st.session_state.my_items)
-        txt = f"{total_val:,}"
-        tw = f_big.getbbox(txt)[2] - f_big.getbbox(txt)[0]
-        draw.text((off_total_x - tw, off_total_y), txt, font=f_big, fill="black")
+# --- [3. 명세서 생성 (부모님 지정 수치 적용)] ---
+if st.button("🚀 명세서 이미지 만들기", type="primary", use_container_width=True):
+    if not st.session_state.my_items:
+        st.warning("내역을 먼저 추가해주세요.")
+    else:
+        try:
+            orig = Image.open("template.png").convert("RGB")
+            W, H = orig.size
 
-        # [내역] 슬라이더 값 적용
-        for i, item in enumerate(st.session_state.my_items):
-            ty = H_TOP + (i * H_ROW) + 12
-            draw.text((20, ty), f"{item['m']}/{item['d']}", font=f_mid, fill="black")
-            draw.text((col_name, ty), item['name'], font=f_mid, fill="black")
-            draw.text((col_spec, ty), item['spec'], font=f_mid, fill="black")
-            draw.text((col_qty, ty), str(item['qty']), font=f_mid, fill="black")
-            
-            p_txt = f"{item['price']:,}"
-            pw = f_mid.getbbox(p_txt)[2] - f_mid.getbbox(p_txt)[0]
-            draw.text((col_price - pw, ty), p_txt, font=f_mid, fill="black")
-            draw.text((col_tax - 20, ty), "0", font=f_mid, fill="black")
+            # 줄 자르기 및 조립
+            H_TOP = 345
+            row_gray = orig.crop((0, 346, W, 404))
+            row_white = orig.crop((0, 406, W, 464))
+            footer = orig.crop((0, H - 72, W, H))
 
-        # [하단 합계]
-        fty = H_TOP + (count * H_ROW) + 18
-        draw.text((col_price - pw, fty), f"{total_val:,}", font=f_mid, fill="black")
-        draw.text((col_tax - 20, fty), "0", font=f_mid, fill="black")
+            count = len(st.session_state.my_items)
+            H_ROW = 58
+            new_h = H_TOP + (H_ROW * count) + footer.height
+            res = Image.new("RGB", (W, new_h), (255, 255, 255))
+            res.paste(orig.crop((0, 0, W, H_TOP)), (0, 0))
+            for i in range(count):
+                res.paste(row_gray if i % 2 == 0 else row_white, (0, H_TOP + (i * H_ROW)))
+            res.paste(footer, (0, H_TOP + (count * H_ROW)))
 
-        st.image(res, caption="미리보기 (조절바를 움직여보세요)")
-        
-        buf = io.BytesIO()
-        res.save(buf, format="PNG")
-        st.download_button("📥 완성된 이미지 저장", buf.getvalue(), "명세서.png")
+            draw = ImageDraw.Draw(res)
+            f_mid = get_font(28)
+            f_big = get_font(48)
 
-    except Exception as e:
-        st.error(f"파일을 찾을 수 없습니다. template.png가 같은 폴더에 있는지 확인해주세요.")
+            # [교정 1] 상단 날짜/거래처 - 부모님 수치(466, 67) 기반 우측 정렬
+            draw_right(draw, 466, 67, datetime.now().strftime("%Y-%m-%d"), f_mid)
+            draw_right(draw, 466, 67 + 55, f"{client}", f_mid)
+
+            # [교정 2] 상단 합계금액 - 부모님 수치(1050, 201)
+            total_sum = sum(item['price'] for item in st.session_state.my_items)
+            draw_right(draw, 1050, 201, f"{total_sum:,}", f_big)
+
+            # [교정 3] 내역 칸 - 부모님 수치 적용 및 우측 끝 보정
+            for i, item in enumerate(st.session_state.my_items):
+                ty = H_TOP + (i * H_ROW) + 12
+                draw.text((20, ty), f"{item['m']}/{item['d']}", font=f_mid, fill="black") # 월일
+                draw.text((348, ty), item['name'], font=f_mid, fill="black")            # 품목
+                draw.text((800, ty), item['spec'], font=f_mid, fill="black")            # 규격
+                draw.text((1050, ty), str(item['qty']), font=f_mid, fill="black")       # 수량
+                # 공급가액/세액은 수량보다 더 오른쪽으로 (기존 수치 기반 보정)
+                draw_right(draw, 1380, ty, f"{item['price']:,}", f_mid)                 # 공급가액
+                draw_right(draw, 1580, ty, "0", f_mid)                                  # 세액
+
+            # [교정 4] 하단 합계
+            foot_ty = H_TOP + (count * H_ROW) + 18
+            draw_right(draw, 1380, foot_ty, f"{total_sum:,}", f_mid)
+            draw_right(draw, 1580, foot_ty, "0", f_mid)
+
+            st.image(res)
+            buf = io.BytesIO()
+            res.save(buf, format="PNG")
+            st.download_button("📥 최종 명세서 저장", buf.getvalue(), f"명세서_{client}.png")
+
+        except Exception as e:
+            st.error(f"오류가 발생했습니다: {e}")
