@@ -11,7 +11,7 @@ if 'my_items' not in st.session_state:
 st.set_page_config(page_title="간편 거래명세서", layout="centered")
 
 @st.cache_resource
-def get_font(size=18):
+def get_font(size=14):
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
     try:
         font_data = urllib.request.urlopen(font_url).read()
@@ -20,8 +20,8 @@ def get_font(size=18):
         return ImageFont.load_default()
 
 # --- [1. 정보 입력 영역] ---
-st.header("1. 정보 입력 (v1.7)")
-client = st.text_input("🏢 거래처명", key="client_name_v17")
+st.header("1. 정보 입력 (v1.8)")
+client = st.text_input("🏢 거래처명", key="client_v18")
 
 with st.container():
     col1, col2 = st.columns(2)
@@ -42,19 +42,15 @@ if st.button("➕ 추가하기", use_container_width=True):
         })
         st.rerun()
 
-# --- [2. 내역 리스트 표시 및 삭제] ---
+# --- [2. 내역 리스트 표시] ---
 if st.session_state.my_items:
     st.divider()
-    st.subheader("📋 입력된 내역")
     for i, item in enumerate(st.session_state.my_items):
         cols = st.columns([4, 1])
         cols[0].write(f"{i+1}. {item['name']} / {item['price']:,}원")
         if cols[1].button("삭제", key=f"del_{i}"):
             st.session_state.my_items.pop(i)
             st.rerun()
-    if st.button("🗑️ 전체 삭제"):
-        st.session_state.my_items = []
-        st.rerun()
 
 st.divider()
 
@@ -67,18 +63,18 @@ if st.button("🚀 명세서 이미지 만들기", type="primary", use_container
             orig = Image.open("template.png").convert("RGB")
             W, H = orig.size
 
-            # 부모님이 알려주신 정밀 좌표
+            # 부모님이 알려주신 정밀 좌표 (줄 높이 22픽셀 고정)
             H_TOP = 123        # 첫 줄 시작 (헤더 끝)
-            H_ROW = 22         # 줄 높이 (145 - 123)
-            H_FOOT_START = 330 # 원본에서 '합계'가 시작되는 대략적인 위치 (이미지 하단부)
+            H_ROW = 22         # 줄 높이
+            H_FOOT_START = 165 # 원본에서 합계 부분이 시작되는 위치 (알려주신 165 이후)
 
-            # 1. 원본에서 조각 추출
+            # 1. 원본 이미지 조각내기
             header = orig.crop((0, 0, W, H_TOP))
-            row_gray = orig.crop((0, 123, W, 145))  # 홀수줄 (회색)
-            row_white = orig.crop((0, 145, W, 167)) # 짝수줄 (흰색) - 145+22=167
+            row_gray = orig.crop((0, 123, W, 145))   # 회색 배경 줄
+            row_white = orig.crop((0, 145, W, 167))  # 흰색 배경 줄
             footer = orig.crop((0, H_FOOT_START, W, H))
 
-            # 2. 새 이미지 조립
+            # 2. 새 이미지 조립 (찌그러짐 방지를 위해 정확한 배수 계산)
             item_count = len(st.session_state.my_items)
             new_h = H_TOP + (H_ROW * item_count) + footer.height
             res = Image.new("RGB", (W, new_h), (255, 255, 255))
@@ -86,41 +82,44 @@ if st.button("🚀 명세서 이미지 만들기", type="primary", use_container
             res.paste(header, (0, 0))
             for i in range(item_count):
                 y_pos = H_TOP + (i * H_ROW)
-                # 홀수는 회색줄, 짝수는 흰색줄 사용
-                row_img = row_gray if i % 2 == 0 else row_white
-                res.paste(row_img, (0, y_pos))
+                # 홀수(0, 2, 4...)는 회색, 짝수(1, 3, 5...)는 흰색 배경 사용
+                line_img = row_gray if i % 2 == 0 else row_white
+                res.paste(line_img, (0, y_pos))
             
+            # 푸터(합계 부분) 붙이기
             res.paste(footer, (0, H_TOP + (item_count * H_ROW)))
 
-            # 3. 글자 채우기
+            # 3. 글자 채우기 (숫자 위치 정밀 조정)
             draw = ImageDraw.Draw(res)
-            f = get_font(14) # 줄 높이가 22이므로 글자는 작게
-            f_title = get_font(24)
+            f = get_font(12)      # 칸이 좁으므로 글자 크기를 살짝 줄임
+            f_bold = get_font(18) # 합계용 큰 글씨
 
-            # 상단 정보 (위치는 이미지에 맞게 조정)
-            draw.text((75, 45), datetime.now().strftime("%Y-%m-%d"), font=f, fill="black")
-            draw.text((75, 75), f"{client} 귀하", font=f, fill="black")
+            # 상단 발행일자 및 거래처 (사진 위치에 맞게 수정)
+            draw.text((150, 45), datetime.now().strftime("%Y-%m-%d"), font=f, fill="black")
+            draw.text((70, 75), f"{client} 귀하", font=f, fill="black")
 
-            # 내역 채우기
+            # 내역 채우기 (y축 중앙 정렬 +2 픽셀 조정)
             total = 0
             for i, item in enumerate(st.session_state.my_items):
-                curr_y = H_TOP + (i * H_ROW) + 2
-                draw.text((10, curr_y), f"{item['m']}/{item['d']}", font=f, fill="black")
+                curr_y = H_TOP + (i * H_ROW) + 4 # 찌그러짐 방지를 위해 중앙 위치 조정
+                draw.text((15, curr_y), f"{item['m']}/{item['d']}", font=f, fill="black")
                 draw.text((85, curr_y), item['name'], font=f, fill="black")
+                draw.text((250, curr_y), item['spec'], font=f, fill="black")
                 draw.text((320, curr_y), str(item['qty']), font=f, fill="black")
-                draw.text((450, curr_y), f"{item['price']:,}", font=f, fill="black")
+                draw.text((430, curr_y), f"{item['price']:,}", font=f, fill="black")
                 total += item['price']
 
-            # 합계 (상단 및 하단)
-            draw.text((250, 45), f"{total:,}", font=f_title, fill="black")
+            # 상단 및 하단 합계 금액 기입
+            draw.text((280, 40), f"{total:,}", font=f_bold, fill="black")
+            
             foot_y = H_TOP + (item_count * H_ROW) + 5
-            draw.text((450, foot_y), f"{total:,}", font=f, fill="black")
+            draw.text((430, foot_y), f"{total:,}", font=f, fill="black")
 
             st.image(res)
             
             buf = io.BytesIO()
             res.save(buf, format="PNG")
-            st.download_button("📥 이미지 저장", buf.getvalue(), f"명세서_{client}.png")
+            st.download_button("📥 수정된 명세서 저장", buf.getvalue(), f"명세서_{client}.png")
 
         except Exception as e:
-            st.error(f"오류가 발생했습니다: {e}")
+            st.error(f"오류 발생: {e}")
