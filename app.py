@@ -10,7 +10,7 @@ if 'my_items' not in st.session_state:
 if 'edit_index' not in st.session_state:
     st.session_state.edit_index = None
 
-st.set_page_config(page_title="간편 명세서 (버튼 우측형)", layout="centered")
+st.set_page_config(page_title="간편 명세서 (최종 완성형)", layout="centered")
 
 @st.cache_resource
 def get_font(size=25):
@@ -26,11 +26,11 @@ def draw_right(draw, x_end, y, text, font, fill="black"):
     w = bbox[2] - bbox[0]
     draw.text((x_end - w, y), str(text), font=font, fill=fill)
 
-# --- [1. 상단 공통 정보] ---
+# --- [1. 상단 정보] ---
 st.header("🧾 명세서 작성")
 client = st.text_input("🏢 거래처명", key="client_name")
 
-# --- [2. 신규 품목 추가 칸] ---
+# --- [2. 신규 품목 추가] ---
 if st.session_state.edit_index is None:
     with st.expander("➕ 새 품목 추가하기", expanded=True):
         d_col1, d_col2 = st.columns(2)
@@ -55,21 +55,20 @@ if st.session_state.edit_index is None:
 
 st.divider()
 
-# --- [3. 내역 확인 (날짜/내역은 왼쪽, 버튼은 오른쪽)] ---
+# --- [3. 내역 확인 (v3.6 글씨 크기 + 버튼 우측 배치)] ---
 if st.session_state.my_items:
     st.subheader("📝 내역 확인 및 수정")
     for i, item in enumerate(st.session_state.my_items):
         
-        # --- 수정 모드 ---
         if st.session_state.edit_index == i:
+            # 수정 모드 (제자리에서 크게)
             with st.container(border=True):
-                st.info(f"📍 {i+1}번 항목 수정")
+                st.info(f"📍 {i+1}번 품목 수정 중")
                 ed_c1, ed_c2 = st.columns(2)
                 m_list = [f"{j:02d}" for j in range(1, 13)]
                 d_list = [f"{j:02d}" for j in range(1, 32)]
                 new_m = ed_c1.selectbox("월", m_list, index=m_list.index(item['m']), key=f"ed_m_{i}")
-                new_d = ed_col2 = ed_c2.selectbox("일", d_list, index=d_list.index(item['d']), key=f"ed_d_{i}")
-                
+                new_d = ed_c2.selectbox("일", d_list, index=d_list.index(item['d']), key=f"ed_d_{i}")
                 new_name = st.text_input("품목명", value=item['name'], key=f"ed_na_{i}")
                 new_spec = st.text_input("규격", value=item['spec'].replace("(t)", ""), key=f"ed_sp_{i}")
                 new_qty = st.selectbox("수량", [0.5, 1.0], index=[0.5, 1.0].index(item['qty']), key=f"ed_qt_{i}")
@@ -87,23 +86,20 @@ if st.session_state.my_items:
                 if btn_c2.button("❌ 취소", key=f"cancel_{i}", use_container_width=True):
                     st.session_state.edit_index = None
                     st.rerun()
-        
-        # --- 일반 표시 모드 (버튼 우측 배치) ---
         else:
-            # 큰 칸을 나눠서 왼쪽엔 글씨, 오른쪽엔 버튼
-            main_col, btn_col = st.columns([3, 1.2]) 
+            # 일반 모드 (가독성 유지 + 버튼만 우측)
+            col_txt, col_btn = st.columns([4, 1]) # 왼쪽은 넓게, 오른쪽은 버튼용
             
-            with main_col:
-                st.markdown(f"**📅 {item['m']}/{item['d']}** | {item['name']}")
-                st.caption(f"{item['spec']} | {item['qty']}t | {item['price']:,}원")
+            with col_txt:
+                st.markdown(f"### 📅 {item['m']}월 {item['d']}일")
+                st.write(f"**{item['name']}** ({item['spec']}) | {item['qty']}t | {item['price']:,}원")
             
-            with btn_col:
-                # 버튼을 위아래가 아닌 양옆으로 작게 배치
-                b1, b2 = st.columns(2)
-                if b1.button("✏️", key=f"ed_btn_{i}", help="수정"):
+            with col_btn:
+                # 수정/삭제 버튼을 세로로 배치하거나 작게 나란히
+                if st.button("✏️ 수정", key=f"ed_btn_{i}", use_container_width=True):
                     st.session_state.edit_index = i
                     st.rerun()
-                if b2.button("🗑️", key=f"del_btn_{i}", help="삭제"):
+                if st.button("🗑️ 삭제", key=f"del_btn_{i}", use_container_width=True):
                     st.session_state.my_items.pop(i)
                     st.rerun()
             st.divider()
@@ -120,7 +116,6 @@ if st.button("🚀 명세서 이미지 만들기", use_container_width=True, typ
             row_gray = orig.crop((0, 346, W, 404))
             row_white = orig.crop((0, 406, W, 464))
             footer = orig.crop((0, H - 72, W, H))
-
             count = len(st.session_state.my_items)
             H_ROW = 58
             new_h = H_TOP + (H_ROW * count) + footer.height
