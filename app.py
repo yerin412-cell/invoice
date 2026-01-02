@@ -10,7 +10,7 @@ if 'my_items' not in st.session_state:
 if 'edit_index' not in st.session_state:
     st.session_state.edit_index = None
 
-st.set_page_config(page_title="간편 명세서 v3.9", layout="centered")
+st.set_page_config(page_title="간편 명세서 최종판", layout="centered")
 
 @st.cache_resource
 def get_font(size=25):
@@ -61,7 +61,6 @@ st.divider()
 if st.session_state.my_items:
     st.subheader("📝 내역 확인 및 수정")
     for i, item in enumerate(st.session_state.my_items):
-        
         if st.session_state.edit_index == i:
             with st.container(border=True):
                 st.info(f"📍 {i+1}번 품목 수정 중")
@@ -91,7 +90,6 @@ if st.session_state.my_items:
             col_txt, col_btn = st.columns([4, 1.2]) 
             with col_txt:
                 st.markdown(f"### 📅 {item['m']}월 {item['d']}일")
-                # [수정] 수량 뒤에 't'를 완전히 제거했습니다.
                 st.write(f"**{item['name']}** ({item['spec']}) | {item['qty']} | {item['price']:,}원")
             
             with col_btn:
@@ -103,7 +101,7 @@ if st.session_state.my_items:
                     st.rerun()
             st.divider()
 
-# --- [4. 명세서 이미지 생성] ---
+# --- [4. 명세서 이미지 생성 및 자동 파일명] ---
 if st.button("🚀 명세서 이미지 만들기", use_container_width=True, type="primary"):
     if not st.session_state.my_items:
         st.warning("내역을 추가해주세요.")
@@ -128,7 +126,8 @@ if st.button("🚀 명세서 이미지 만들기", use_container_width=True, typ
             f_mid = get_font(28)
             f_big = get_font(48)
 
-            draw_right(draw, 620, 67, datetime.now().strftime("%Y-%m-%d"), f_mid)
+            today_date = datetime.now().strftime("%Y-%m-%d")
+            draw_right(draw, 620, 67, today_date, f_mid)
             draw_right(draw, 620, 122, f"{client}", f_mid)
             total_sum = sum(item['price'] for item in st.session_state.my_items)
             draw_right(draw, 1070, 201, f"{total_sum:,}", f_big)
@@ -137,8 +136,6 @@ if st.button("🚀 명세서 이미지 만들기", use_container_width=True, typ
                 ty = H_TOP + (i * H_ROW) + 12
                 draw.text((20, ty), f"{item['m']}/{item['d']}", font=f_mid, fill="black")
                 draw.text((348, ty), item['name'], font=f_mid, fill="black")
-                
-                # [확인] 명세서 이미지에도 수량(1060 위치)에 't'가 들어가지 않도록 설정됨
                 draw_right(draw, 850, ty, item['spec'], f_mid)          
                 draw_right(draw, 1060, ty, f"{item['qty']}", f_mid)     
                 draw_right(draw, 1510, ty, f"{item['price']:,}", f_mid) 
@@ -149,8 +146,17 @@ if st.button("🚀 명세서 이미지 만들기", use_container_width=True, typ
             draw_right(draw, 1700, foot_ty, "0", f_mid)
 
             st.image(res)
+            
+            # [파일명 변경 핵심 코드]
+            final_filename = f"{client}_{today_date}.png"
+            
             buf = io.BytesIO()
             res.save(buf, format="PNG")
-            st.download_button("📥 최종 명세서 저장", buf.getvalue(), f"명세서_{client}.png", use_container_width=True)
+            st.download_button(
+                label="📥 최종 명세서 저장",
+                data=buf.getvalue(),
+                file_name=final_filename, # 여기서 파일명이 바뀝니다!
+                use_container_width=True
+            )
         except Exception as e:
             st.error(f"이미지 생성 중 오류: {e}")
