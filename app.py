@@ -417,4 +417,3 @@ if st.button(
 
         except Exception as e:
             st.error(f"이미지 생성 중 오류: {e}")
-```
